@@ -34,10 +34,6 @@ staticfiles/
 # macOS
 .DS_Store
 
-# Render
-Procfile
-runtime.txt
-requirements.txt
 
 # Miscellaneous
 *.bak
