@@ -14,7 +14,7 @@ from telegram.ext import (
 from decouple import config
 import requests
 import phonenumbers
-from phonenumbers import NumberParseError
+from phonenumbers.phonenumberutil import NumberParseError
 import jdatetime
 from django.http import HttpResponse
 
