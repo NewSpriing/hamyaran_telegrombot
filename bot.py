@@ -14,7 +14,7 @@ from telegram.ext import (
 from decouple import config
 import requests
 import phonenumbers
-from phonenumbers import NumberParseError
+from phonenumbers.phonenumberutil import NumberParseError
 import jdatetime
 from django.http import HttpResponse
 
@@ -343,7 +343,6 @@ async def fm_relationship(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text('عضو خانواده با موفقیت اضافه شد!')
         else:
             await query.message.reply_text('خطا در افزودن عضو خانواده.')
-        return ConversationHandler.END
     except Exception as e:
         logger.error("Error adding family member: %s", e)
         await query.message.reply_text('خطا در افزودن عضو خانواده.')
@@ -733,7 +732,7 @@ def webhook_update(request):
                 elif update.message and update.message.text == '/reset':
                     await reset(update, app.context_types())
                 else:
-                    await start(update, app.context_types())  # Fallback
+                    await start(update, app.context_types())
                 return HttpResponse("OK", status=200)
             except Exception as e:
                 logger.error("Error processing webhook update: %s", str(e))
