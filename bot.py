@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -15,8 +16,7 @@ import requests
 import phonenumbers
 from phonenumbers import NumberParseError
 import jdatetime
-from datetime import timedelta
-import json
+from django.http import HttpResponse
 
 # Enable detailed logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
@@ -24,23 +24,15 @@ logger = logging.getLogger(__name__)
 
 # States for registration conversation
 FULL_NAME, PHONE_NUMBER, AGE, GENDER, MEDICAL_CONDITIONS, EMAIL, REGION = range(7)
-
-# States for order conversation
 CATEGORY, SERVICE, RECIPIENT, ADDRESS, DATE, TIME, SPECIAL_CONDITIONS, PREFERRED_GENDER = range(7, 15)
-
-# States for family member conversation
 FM_FULL_NAME, FM_AGE, FM_GENDER, FM_MEDICAL_CONDITIONS, FM_EMAIL, FM_REGION, FM_RELATIONSHIP = range(15, 22)
-
-# States for address conversation
 ADDR_TITLE, ADDR_FULL_ADDRESS, ADDR_LOCATION = range(22, 25)
-
-# States for edit family member conversation
 FM_EDIT_FULL_NAME, FM_EDIT_AGE, FM_EDIT_GENDER, FM_EDIT_MEDICAL_CONDITIONS, FM_EDIT_EMAIL, FM_EDIT_REGION, FM_EDIT_RELATIONSHIP = range(25, 32)
 
 # Telegram Bot Token and Webhook URL
 TOKEN = config('TELEGRAM_BOT_TOKEN')
 WEBHOOK_URL = config('WEBHOOK_URL', default='https://medical-bot-tpl6.onrender.com/telegram/webhook/')
-ADMIN_CHAT_ID = config('ADMIN_CHAT_ID', default=None)  # Optional: Set admin chat ID for error notifications
+ADMIN_CHAT_ID = config('ADMIN_CHAT_ID', default=None)
 
 # API Base URL
 API_BASE_URL = config('API_BASE_URL', default='https://medical-bot-tpl6.onrender.com/api/')
@@ -238,7 +230,6 @@ async def region(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug("Received region: %s from user %s", update.message.text, update.effective_user.id)
     telegram_id = str(update.message.from_user.id)
 
-    # Register user via API
     data = {
         'telegram_id': telegram_id,
         'full_name': context.user_data['full_name'],
@@ -336,7 +327,6 @@ async def fm_relationship(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = str(query.from_user.id)
     logger.debug("Received family member relationship: %s from user %s", relationship, query.from_user.id)
 
-    # Register family member via API
     data = {
         'full_name': context.user_data['fm_full_name'],
         'age': context.user_data['fm_age'],
@@ -353,6 +343,7 @@ async def fm_relationship(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text('عضو خانواده با موفقیت اضافه شد!')
         else:
             await query.message.reply_text('خطا در افزودن عضو خانواده.')
+        return ConversationHandler.END
     except Exception as e:
         logger.error("Error adding family member: %s", e)
         await query.message.reply_text('خطا در افزودن عضو خانواده.')
@@ -442,7 +433,6 @@ async def fm_edit_relationship(update: Update, context: ContextTypes.DEFAULT_TYP
     fm_id = context.user_data['fm_id']
     logger.debug("Received edit family member relationship: %s from user %s", relationship, query.from_user.id)
 
-    # Update family member via API
     data = {
         'full_name': context.user_data['fm_edit_full_name'] if context.user_data['fm_edit_full_name'] != 'بدون تغییر' else None,
         'age': context.user_data['fm_edit_age'],
@@ -494,7 +484,6 @@ async def addr_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ADDR_LOCATION
         latitude, longitude = location.latitude, location.longitude
 
-    # Register address via API
     data = {
         'title': context.user_data['addr_title'],
         'full_address': context.user_data['addr_full_address'],
@@ -641,7 +630,6 @@ async def preferred_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['preferred_gender'] = pref_gender
     logger.debug("Received preferred gender: %s from user %s", pref_gender, query.from_user.id)
 
-    # Register order via API
     data = {
         'service_id': context.user_data['service_id'],
         'address_id': context.user_data['address_id'],
@@ -702,11 +690,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug("Received /reset command from user %s", update.effective_user.id)
     try:
-        # Delete webhook to clear pending updates
         response = requests.get(f'https://api.telegram.org/bot{TOKEN}/deleteWebhook')
         logger.debug("Delete webhook API response: %s", response.status_code)
         if response.status_code == 200:
-            # Re-set webhook
             response = requests.get(f'https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}')
             logger.debug("Set webhook API response: %s", response.status_code)
             if response.status_code == 200:
@@ -729,84 +715,41 @@ async def notify_admin(context: ContextTypes.DEFAULT_TYPE, message: str):
         except Exception as e:
             logger.error("Failed to notify admin: %s", e)
 
-async def webhook_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug("Received webhook update from user %s: %s", update.effective_user.id, json.dumps(update.to_dict(), indent=2))
+def webhook_update(request):
+    logger.debug("Received webhook request: %s", request.body.decode('utf-8'))
     try:
-        if update.message and update.message.text == '/start':
-            return await start(update, context)
-        elif update.message and update.message.text == '/status':
-            return await status(update, context)
-        elif update.message and update.message.text == '/reset':
-            return await reset(update, context)
-        else:
-            return await start(update, context)  # Fallback to start
+        update = Update.de_json(json.loads(request.body.decode('utf-8')), bot=Application.builder().token(TOKEN).build().bot)
+        if not update:
+            logger.error("Invalid update received")
+            return HttpResponse("Invalid update", status=400)
+        
+        async def process_update():
+            try:
+                app = Application.builder().token(TOKEN).build()
+                if update.message and update.message.text == '/start':
+                    await start(update, app.context_types())
+                elif update.message and update.message.text == '/status':
+                    await status(update, app.context_types())
+                elif update.message and update.message.text == '/reset':
+                    await reset(update, app.context_types())
+                else:
+                    await start(update, app.context_types())  # Fallback
+                return HttpResponse("OK", status=200)
+            except Exception as e:
+                logger.error("Error processing webhook update: %s", str(e))
+                await notify_admin(app.context_types(), f"Webhook error for user {update.effective_user.id}: {e}")
+                return HttpResponse(f"Error: {e}", status=500)
+
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        response = loop.run_until_complete(process_update())
+        loop.close()
+        return response
+    except json.JSONDecodeError as e:
+        logger.error("Invalid JSON in webhook request: %s", str(e))
+        return HttpResponse("Invalid JSON", status=400)
     except Exception as e:
-        logger.error("Error processing webhook update: %s", e)
-        await notify_admin(context, f"Webhook error for user {update.effective_user.id}: {e}")
-        raise  # Re-raise to return 500 and avoid 400
-
-def main():
-    logger.info("Starting bot with token: %s", TOKEN[:10] + "...")
-    application = Application.builder().token(TOKEN).build()
-
-    conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(button, pattern='^(register|request_service|add_family_member|manage_family_members|fm_manage_|fm_edit|fm_delete|add_address)$')],
-        states={
-            FULL_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, full_name)],
-            PHONE_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, phone_number)],
-            AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, age)],
-            GENDER: [CallbackQueryHandler(gender, pattern='^(male|female)$')],
-            MEDICAL_CONDITIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, medical_conditions)],
-            EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, email)],
-            REGION: [MessageHandler(filters.TEXT & ~filters.COMMAND, region)],
-            FM_FULL_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_full_name)],
-            FM_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_age)],
-            FM_GENDER: [CallbackQueryHandler(fm_gender, pattern='^fm_(male|female)$')],
-            FM_MEDICAL_CONDITIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_medical_conditions)],
-            FM_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_email)],
-            FM_REGION: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_region)],
-            FM_RELATIONSHIP: [CallbackQueryHandler(fm_relationship, pattern='^fm_')],
-            FM_EDIT_FULL_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_edit_full_name)],
-            FM_EDIT_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_edit_age)],
-            FM_EDIT_GENDER: [CallbackQueryHandler(fm_edit_gender, pattern='^fm_edit_(male|female|nochange)$')],
-            FM_EDIT_MEDICAL_CONDITIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_edit_medical_conditions)],
-            FM_EDIT_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_edit_email)],
-            FM_EDIT_REGION: [MessageHandler(filters.TEXT & ~filters.COMMAND, fm_edit_region)],
-            FM_EDIT_RELATIONSHIP: [CallbackQueryHandler(fm_edit_relationship, pattern='^fm_edit_')],
-            ADDR_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, addr_title)],
-            ADDR_FULL_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, addr_full_address)],
-            ADDR_LOCATION: [MessageHandler(filters.TEXT | filters.LOCATION, addr_location)],
-            CATEGORY: [CallbackQueryHandler(category, pattern='^cat_')],
-            SERVICE: [CallbackQueryHandler(service, pattern='^srv_')],
-            RECIPIENT: [CallbackQueryHandler(recipient, pattern='^recip_')],
-            ADDRESS: [CallbackQueryHandler(address, pattern='^addr_')],
-            DATE: [CallbackQueryHandler(date, pattern='^date_')],
-            TIME: [CallbackQueryHandler(time, pattern='^time_')],
-            SPECIAL_CONDITIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, special_conditions)],
-            PREFERRED_GENDER: [CallbackQueryHandler(preferred_gender, pattern='^pref_')],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-    )
-
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('status', status))
-    application.add_handler(CommandHandler('reset', reset))
-    application.add_handler(conv_handler)
-    application.add_handler(CallbackQueryHandler(button))
-
-    # Set webhook
-    try:
-        logger.info("Setting webhook to %s", WEBHOOK_URL)
-        application.run_webhook(
-            listen='0.0.0.0',
-            port=int(os.environ.get('PORT', 8443)),
-            url_path='telegram/webhook/',
-            webhook_url=WEBHOOK_URL,
-        )
-        logger.info("Webhook set successfully to %s", WEBHOOK_URL)
-    except Exception as e:
-        logger.error("Failed to set webhook: %s", e)
-        raise
-
-if __name__ == '__main__':
-    main()
+        logger.error("Unexpected error in webhook: %s", str(e))
+        return HttpResponse(f"Error: {e}", status=500)
+    
