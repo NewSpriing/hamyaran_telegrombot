@@ -11,7 +11,8 @@ from telegram.ext import (
 from decouple import config
 import requests
 import jdatetime
-from datetime import timedelta
+from datetime import datetime
+from django.utils import timezone
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -84,7 +85,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             family_members = "\n".join([f"{fm['full_name']} ({fm['relationship']})" for fm in user_data['family_members']])
             addresses = "\n".join([addr['title'] for addr in user_data['addresses']])
             documents = "\n".join([f"{fm['full_name']}: {doc['description']}" for fm in user_data['family_members'] for doc in fm.get('documents', [])])
-            birth_date = user_data['birth_date'] or 'وارد نشده'
+            birth_date = user_data['birth_date']
+            if birth_date:
+                birth_date = jdatetime.date.fromgregorian(date=datetime.strptime(birth_date, '%Y-%m-%d')).strftime('%Y/%m/%d')
+            else:
+                birth_date = 'وارد نشده'
             region = user_data['region'] or 'وارد نشده'
             age = user_data['age'] or 'محاسبه نشده'
             await query.message.reply_text(
@@ -309,10 +314,21 @@ async def edit_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     birth_date_text = update.message.text
     try:
         year, month, day = map(int, birth_date_text.split('/'))
-        birth_date = jdatetime.date(year, month, day).togregorian()
+        jalali_date = jdatetime.date(year, month, day)
+        if jalali_date > jdatetime.date.today():
+            await update.message.reply_text('تاریخ تولد نمی‌تواند در آینده باشد. دوباره وارد کنید:')
+            return EDIT_BIRTH_DATE
+        if jdatetime.date.today().year - year < 18:
+            await update.message.reply_text('کاربر باید حداقل 18 سال سن داشته باشد. دوباره وارد کنید:')
+            return EDIT_BIRTH_DATE
+        birth_date = jalali_date.togregorian()  # Convert to Gregorian for storage
         context.user_data['birth_date'] = birth_date
         phone_number = context.user_data.get('phone_number')
-        response = requests.put(f'{API_BASE_URL}users/profile/', json={'birth_date': birth_date.isoformat()}, params={'phone_number': phone_number})
+        response = requests.put(
+            f'{API_BASE_URL}users/profile/',
+            json={'birth_date': birth_date.strftime('%Y-%m-%d')},
+            params={'phone_number': phone_number}
+        )
         if response.status_code == 200:
             await update.message.reply_text('تاریخ تولد با موفقیت به‌روزرسانی شد!')
         else:
@@ -348,7 +364,11 @@ async def fm_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         try:
             year, month, day = map(int, birth_date_text.split('/'))
-            birth_date = jdatetime.date(year, month, day).togregorian()
+            jalali_date = jdatetime.date(year, month, day)
+            if jalali_date > jdatetime.date.today():
+                await update.message.reply_text('تاریخ تولد نمی‌تواند در آینده باشد. دوباره وارد کنید:')
+                return FM_BIRTH_DATE
+            birth_date = jalali_date.togregorian()  # Convert to Gregorian for storage
             context.user_data['fm_birth_date'] = birth_date
         except ValueError:
             await update.message.reply_text('فرمت تاریخ نامعتبر است. لطفاً به فرمت 1369/05/15 وارد کنید یا "خالی" بنویسید:')
@@ -388,7 +408,7 @@ async def fm_region(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("مادر", callback_data='fm_mother')],
         [InlineKeyboardButton("پسر", callback_data='fm_son')],
         [InlineKeyboardButton("دختر", callback_data='fm_daughter')],
-634        [InlineKeyboardButton("همسر", callback_data='fm_spouse')],
+        [InlineKeyboardButton("همسر", callback_data='fm_spouse')],
         [InlineKeyboardButton("خواهر/برادر", callback_data='fm_sibling')],
         [InlineKeyboardButton("سایر", callback_data='fm_other')],
     ]
@@ -404,7 +424,7 @@ async def fm_relationship(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Register or update family member via API
     data = {
         'full_name': context.user_data['fm_full_name'],
-        'birth_date': context.user_data['fm_birth_date'].isoformat() if context.user_data['fm_birth_date'] else None,
+        'birth_date': context.user_data['fm_birth_date'].strftime('%Y-%m-%d') if context.user_data['fm_birth_date'] else None,
         'gender': context.user_data['fm_gender'],
         'medical_conditions': context.user_data['fm_medical_conditions'],
         'email': context.user_data['fm_email'],
@@ -738,7 +758,7 @@ def setup_handlers(application):
             EDIT_REGION: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_region)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
+        per_message=False
     )
 
     application.add_handler(CommandHandler('start', start))

@@ -1,20 +1,41 @@
 from django.contrib import admin
-from .models import CustomUser, Address, FamilyMember
+from django.contrib.auth.admin import UserAdmin
+from .models import CustomUser, Address, FamilyMember, Document
 
-@admin.register(CustomUser)
-class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ('full_name', 'phone_number', 'telegram_id', 'region')
-    search_fields = ('full_name', 'phone_number', 'telegram_id')
-    list_filter = ('gender', 'region')
+class CustomUserAdmin(UserAdmin):
+    model = CustomUser
+    list_display = ['phone_number', 'full_name', 'gender', 'email', 'age']
+    list_filter = ['gender']
+    fieldsets = (
+        (None, {'fields': ('phone_number', 'password')}),
+        ('Personal Info', {'fields': ('full_name', 'birth_date', 'gender', 'medical_conditions', 'email', 'region')}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+    )
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('phone_number', 'full_name', 'gender', 'password1', 'password2')}
+        ),
+    )
+    search_fields = ['phone_number', 'full_name']
+    ordering = ['phone_number']
 
-@admin.register(Address)
 class AddressAdmin(admin.ModelAdmin):
-    list_display = ('title', 'user', 'full_address')
-    search_fields = ('title', 'full_address', 'user__full_name')
-    list_filter = ('user',)
+    list_display = ['title', 'user', 'full_address']
+    search_fields = ['title', 'full_address']
+    list_filter = ['user']
 
-@admin.register(FamilyMember)
 class FamilyMemberAdmin(admin.ModelAdmin):
-    list_display = ('full_name', 'user', 'relationship', 'age', 'gender')
-    search_fields = ('full_name', 'user__full_name', 'relationship')
-    list_filter = ('relationship', 'gender', 'user')
+    list_display = ['full_name', 'user', 'relationship', 'gender']
+    search_fields = ['full_name']
+    list_filter = ['relationship', 'gender']
+
+class DocumentAdmin(admin.ModelAdmin):
+    list_display = ['description', 'family_member', 'uploaded_at']
+    search_fields = ['description']
+    list_filter = ['uploaded_at']
+
+admin.site.register(CustomUser, CustomUserAdmin)
+admin.site.register(Address, AddressAdmin)
+admin.site.register(FamilyMember, FamilyMemberAdmin)
+admin.site.register(Document, DocumentAdmin)
