@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django_jalali',
     'users.apps.UsersConfig',
+    'medical_bot.apps.MedicalBotConfig',
     'services.apps.ServicesConfig',
     'orders.apps.OrdersConfig',
     'rest_framework',

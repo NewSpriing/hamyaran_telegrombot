@@ -4,6 +4,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse
 from bot import webhook_update
 import logging
+from telegram.ext import DjangoWebhookView
+from ..bot import get_application
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ urlpatterns = [
     path('api/users/', include('users.urls')),
     path('api/services/', include('services.urls')),
     path('api/orders/', include('orders.urls')),
-    path('telegram/webhook/', csrf_exempt(webhook_update), name='webhook'),
+    path('telegram/webhook/', DjangoWebhookView.as_view(application=get_application()), name='webhook'),
     path('telegram/test/', test_webhook, name='test_webhook'),
     path('telegram/logs/', webhook_logs, name='webhook_logs'),
 ]

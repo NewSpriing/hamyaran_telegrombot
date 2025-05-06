@@ -735,24 +735,11 @@ async def notify_admin(context: ContextTypes.DEFAULT_TYPE, message: str):
         except Exception as e:
             logger.error("Failed to notify admin: %s", e)
 
-async def webhook_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug("Received webhook update from user %s: %s", update.effective_user.id, json.dumps(update.to_dict(), indent=2))
-    try:
-        if update.message and update.message.text == '/start':
-            return await start(update, context)
-        elif update.message and update.message.text == '/status':
-            return await status(update, context)
-        elif update.message and update.message.text == '/reset':
-            return await reset(update, context)
-        else:
-            return await start(update, context)  # Fallback to start
-    except Exception as e:
-        logger.error("Error processing webhook update: %s", e)
-        await notify_admin(context, f"Webhook error for user {update.effective_user.id}: {e}")
-        raise  # Re-raise to return 500 and avoid 400
+# Remove webhook_update as it should not be a standalone view
+# Instead, the Application handles webhook updates
 
-def main():
-    logger.info("Starting bot with token: %s", TOKEN[:10] + "...")
+def get_application():
+    """Create and configure the Telegram Application."""
     application = Application.builder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -799,6 +786,12 @@ def main():
     application.add_handler(CommandHandler('reset', reset))
     application.add_handler(conv_handler)
     application.add_handler(CallbackQueryHandler(button))
+
+    return application
+
+def main():
+    logger.info("Starting bot with token: %s", TOKEN[:10] + "...")
+    application = get_application()
 
     # Set webhook
     try:
