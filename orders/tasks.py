@@ -5,6 +5,15 @@ from users.models import CustomUser
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from decouple import config
 import jdatetime
+from celery import shared_task
+import logging
+
+logger = logging.getLogger(__name__)
+
+@shared_task
+def test_task():
+    logger.info("Test task executed successfully")
+    return "Test task completed"
 
 @shared_task
 def send_reminder():
