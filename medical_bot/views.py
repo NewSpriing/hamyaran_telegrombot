@@ -1,26 +1,38 @@
+import json
+import logging
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from telegram import Update
 from telegram.ext import Application
+from bot import setup_handlers
 from decouple import config
-import json
+
+logger = logging.getLogger(__name__)
 
 # Initialize the Telegram bot application
-TOKEN = config('TELEGRAM_BOT_TOKEN')
-application = Application.builder().token(TOKEN).build()
+application = Application.builder().token(config('TELEGRAM_BOT_TOKEN')).build()
 
-# Import bot handlers (we'll set this up after updating bot.py)
-from bot import setup_handlers
-
-# Setup handlers
+# Setup bot handlers
 setup_handlers(application)
 
 @csrf_exempt
 def webhook(request):
-    if request.method == 'POST':
-        update = Update.de_json(request.get_json(force=True), None)
-        application = Application.builder().token(config('TELEGRAM_BOT_TOKEN')).build()
-        setup_handlers(application)
-        application.process_update(update)
-        return HttpResponse(status=200)
-    return HttpResponse(status=400)
+    """Handle incoming Telegram webhook requests."""
+    try:
+        if request.method == 'POST':
+            # Parse JSON data from request.body
+            update_data = json.loads(request.body.decode('utf-8'))
+            update = Update.de_json(update_data, application.bot)
+            if update:
+                application.process_update(update)
+                return HttpResponse(status=200)
+            else:
+                logger.error("Invalid update received")
+                return HttpResponse(status=400)
+        return HttpResponse(status=405)  # Method not allowed
+    except json.JSONDecodeError:
+        logger.error("Failed to decode JSON from request")
+        return HttpResponse(status=400)
+    except Exception as e:
+        logger.error(f"Error processing webhook: {str(e)}")
+        return HttpResponse(status=500)
