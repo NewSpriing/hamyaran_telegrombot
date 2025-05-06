@@ -1,8 +1,9 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import CustomUser, Address, FamilyMember
-from .serializers import CustomUserSerializer, AddressSerializer, FamilyMemberSerializer
+from .models import CustomUser, Address, FamilyMember, Document
+from .serializers import CustomUserSerializer, AddressSerializer, FamilyMemberSerializer, DocumentSerializer
+from rest_framework.parsers import MultiPartParser, FormParser
 
 class CustomUserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
@@ -48,6 +49,9 @@ class AddressViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def perform_update(self, serializer):
+        serializer.save(user=self.request.user)
+
 class FamilyMemberViewSet(viewsets.ModelViewSet):
     serializer_class = FamilyMemberSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -57,4 +61,18 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(user=self.request.user)
+
+class DocumentViewSet(viewsets.ModelViewSet):
+    serializer_class = DocumentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+
+    def get_queryset(self):
+        return Document.objects.filter(family_member__user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(family_member_id=self.request.data.get('family_member_id'))
         
