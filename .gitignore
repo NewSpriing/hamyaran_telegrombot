@@ -14,9 +14,7 @@ venv.bak/
 *.log
 *.pot
 *.pyc
-*.sqlite3
-migrations/
-staticfiles/
+
 
 # Environment variables
 .env
