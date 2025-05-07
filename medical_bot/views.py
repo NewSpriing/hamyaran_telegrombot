@@ -9,6 +9,7 @@ from django.dispatch import receiver
 from django.urls import path
 from django.core.signals import request_started
 import asyncio
+import json  # Import the json library
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -43,7 +44,7 @@ async def telegram_webhook(request):
 
     try:
         # Deserialize the update
-        update_data = request.body.decode('utf-8')  # Assuming JSON; adjust if needed
+        update_data = json.loads(request.body.decode('utf-8'))  # Parse the JSON
         # Ensure application is initialized before processing the update
         if application is None:
             await initialize_telegram_app()
@@ -55,7 +56,7 @@ async def telegram_webhook(request):
         logger.info("Update processed successfully.")
         return HttpResponse(status=200, content="OK")  # Simple acknowledgment
 
-    except ValueError as e:
+    except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON payload: {e}")
         return JsonResponse({"error": "Invalid request body"}, status=400)
 
