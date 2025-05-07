@@ -1,64 +1,39 @@
 import logging
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from telegram import Update
-from telegram.ext import Application
+from telegram.ext import Application, CallbackContext
 from decouple import config
 from bot import setup_handlers
+from django.dispatch import receiver
+from django.urls import path
+from django.core.signals import request_started
+import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Global Application instance (not initialized yet)
-application = None
+# Module-level Application instance
+application: Application = None  # Initialize as None with type hint
 
-def initialize_application():
-    """Initialize the Telegram application globally."""
+async def initialize_telegram_app() -> Application:
+    """Initializes the Telegram Application instance."""
     global application
     if application is None:
-        logger.debug("Initializing Telegram Application")
+        token = config('TELEGRAM_BOT_TOKEN')
+        logger.info(f"Initializing Telegram bot with token: {token[:10]}...")  # Log first 10 characters
         try:
-            token = config('TELEGRAM_BOT_TOKEN')
-            logger.debug(f"TELEGRAM_BOT_TOKEN: {token[:10]}...")  # Log first 10 chars for security
-            application = Application.builder().token(token).build()
+            application = Application.builder().token(token).read_timeout(30).write_timeout(30).connect_timeout(30).build()
             setup_handlers(application)
-            logger.debug("Application initialized successfully")
+            await application.initialize()  # Initialize the application
+            logger.info("Telegram bot initialized.")
         except Exception as e:
-            logger.error(f"Failed to initialize application: {str(e)}")
+            logger.error(f"Error during Telegram bot initialization: {e}", exc_info=True)
             raise
-    else:
-        logger.debug("Application already initialized")
     return application
 
 @csrf_exempt
-async def webhook(request):
-    """Handle Telegram webhook requests."""
-    logger.debug("Received webhook request")
-    if request.method == 'POST':
-        # Ensure application is initialized
-        try:
-            app = initialize_application()
-            logger.debug("Application retrieved for webhook")
-        except Exception as e:
-            logger.error(f"Webhook initialization failed: {str(e)}")
-            return HttpResponse(status=500)
-        
-        # Get the update from the request body
-        try:
-            update = Update.de_json(request.POST, app.bot)
-            logger.debug("Update parsed successfully")
-        except Exception as e:
-            logger.error(f"Failed to parse update: {str(e)}")
-            return HttpResponse(status=400)
-        
-        # Process the update asynchronously
-        try:
-            await app.process_update(update)
-            logger.debug("Update processed successfully")
-            return HttpResponse(status=200)
-        except Exception as e:
-            logger.error(f"Failed to process update: {str(e)}")
-            return HttpResponse(status=500)
-    logger.debug("Invalid request method")
-    return HttpResponse(status=400)
+async def telegram_webhook(request):
+    """Handles incoming Telegram updates via webhook."""
+    # ... (بقیه کد webhook شما)

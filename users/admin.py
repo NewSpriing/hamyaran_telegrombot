@@ -1,10 +1,12 @@
+
+# users/admin.py
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser, Address, FamilyMember, Document
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
-    list_display = ['phone_number', 'full_name', 'gender', 'email', 'age']
+    list_display = ['phone_number', 'full_name', 'gender', 'email']  # Removed 'age' from list_display
     list_filter = ['gender']
     fieldsets = (
         (None, {'fields': ('phone_number', 'password')}),
@@ -14,8 +16,8 @@ class CustomUserAdmin(UserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('phone_number', 'full_name', 'gender', 'password1', 'password2')}
-        ),
+            'fields': ('phone_number', 'full_name', 'gender', 'password')  # Removed password1/2
+        }),
     )
     search_fields = ['phone_number', 'full_name']
     ordering = ['phone_number']

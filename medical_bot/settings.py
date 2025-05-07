@@ -68,7 +68,7 @@ DATABASES = {
         # Default URL for local development
         default=config(
             'DATABASE_URL',
-            default='postgresql://postgres:mysecretpassword@localhost:5432/medical_bot_db'
+            default='postgresql://admin:1234@localhost:5432/medical_bot_db'
         ),
         # Keep connections alive for 10 minutes
         conn_max_age=600,

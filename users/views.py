@@ -1,9 +1,12 @@
-from rest_framework import viewsets, permissions
+import logging
+from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import CustomUser, Address, FamilyMember, Document
-from .serializers import CustomUserSerializer, AddressSerializer, FamilyMemberSerializer, DocumentSerializer
 from rest_framework.parsers import MultiPartParser, FormParser
+from .models import CustomUser, Address, FamilyMember, Document
+from .serializers import CustomUserSerializer, AddressSerializer, FamilyMemberSerializer, DocumentSerializer, CreateCustomUserSerializer
+
+logger = logging.getLogger(__name__)
 
 class CustomUserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
@@ -15,29 +18,18 @@ class CustomUserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def register(self, request):
-        telegram_id = request.data.get('telegram_id')
-        full_name = request.data.get('full_name')
-        phone_number = request.data.get('phone_number')
-        age = request.data.get('age')
-        gender = request.data.get('gender')
-        medical_conditions = request.data.get('medical_conditions')
-        email = request.data.get('email')
-        region = request.data.get('region')
-
-        if CustomUser.objects.filter(telegram_id=telegram_id).exists():
-            return Response({'error': 'کاربر قبلاً ثبت‌نام کرده است'}, status=400)
-
-        user = CustomUser.objects.create(
-            telegram_id=telegram_id,
-            full_name=full_name,
-            phone_number=phone_number,
-            age=age,
-            gender=gender,
-            medical_conditions=medical_conditions,
-            email=email,
-            region=region
-        )
-        return Response(CustomUserSerializer(user).data)
+        serializer = CreateCustomUserSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                serializer.save()
+                logger.info(f"User registered: {serializer.validated_data.get('phone_number')}")
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                logger.error(f"Error registering user: {e}", exc_info=True)
+                return Response({"error": "Failed to register user."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Invalid user registration data: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = AddressSerializer
@@ -47,10 +39,20 @@ class AddressViewSet(viewsets.ModelViewSet):
         return Address.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        try:
+            serializer.save(user=self.request.user)
+            logger.info(f"Address created for user: {self.request.user.phone_number}")
+        except Exception as e:
+            logger.error(f"Error creating address: {e}", exc_info=True)
+            raise
 
     def perform_update(self, serializer):
-        serializer.save(user=self.request.user)
+        try:
+            serializer.save(user=self.request.user)
+            logger.info(f"Address updated for user: {self.request.user.phone_number}")
+        except Exception as e:
+            logger.error(f"Error updating address: {e}", exc_info=True)
+            raise
 
 class FamilyMemberViewSet(viewsets.ModelViewSet):
     serializer_class = FamilyMemberSerializer
@@ -60,10 +62,20 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
         return FamilyMember.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        try:
+            serializer.save(user=self.request.user)
+            logger.info(f"Family member created for user: {self.request.user.phone_number}")
+        except Exception as e:
+            logger.error(f"Error creating family member: {e}", exc_info=True)
+            raise
 
     def perform_update(self, serializer):
-        serializer.save(user=self.request.user)
+        try:
+            serializer.save(user=self.request.user)
+            logger.info(f"Family member updated for user: {self.request.user.phone_number}")
+        except Exception as e:
+            logger.error(f"Error updating family member: {e}", exc_info=True)
+            raise
 
 class DocumentViewSet(viewsets.ModelViewSet):
     serializer_class = DocumentSerializer
@@ -74,5 +86,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
         return Document.objects.filter(family_member__user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(family_member_id=self.request.data.get('family_member_id'))
-        
+        try:
+            serializer.save()
+            logger.info(f"Document created for family member: {serializer.instance.family_member.full_name}")
+        except Exception as e:
+            logger.error(f"Error creating document: {e}", exc_info=True)
+            raise
