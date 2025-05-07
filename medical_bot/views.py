@@ -36,4 +36,38 @@ async def initialize_telegram_app() -> Application:
 @csrf_exempt
 async def telegram_webhook(request):
     """Handles incoming Telegram updates via webhook."""
-    # ... (بقیه کد webhook شما)
+
+    if request.method != "POST":
+        logger.warning(f"Invalid HTTP method: {request.method}")
+        return HttpResponse(status=405, content="Method Not Allowed")  # Correct status code
+
+    try:
+        # Deserialize the update
+        update_data = request.body.decode('utf-8')  # Assuming JSON; adjust if needed
+        # Ensure application is initialized before processing the update
+        if application is None:
+            await initialize_telegram_app()
+        update = Update.de_json(update_data, application.bot)  # Use the module-level application
+        logger.debug(f"Received update: {update.to_dict()}")  # Log the update details
+
+        # Process the update
+        await application.process_update(update)
+        logger.info("Update processed successfully.")
+        return HttpResponse(status=200, content="OK")  # Simple acknowledgment
+
+    except ValueError as e:
+        logger.error(f"Invalid JSON payload: {e}")
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+
+    except Exception as e:
+        logger.error(f"Webhook error: {e}", exc_info=True)  # Log with traceback
+        return HttpResponse(status=500, content="Internal Server Error")
+
+# Django signal to initialize on server start (or similar event)
+@receiver(request_started)
+def on_server_start(sender, **kwargs):
+    """Initializes the Telegram bot when the server starts."""
+    async def _async_init():
+        await initialize_telegram_app()
+
+    asyncio.run(_async_init())

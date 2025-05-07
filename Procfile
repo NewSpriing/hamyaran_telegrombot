@@ -1,1 +1,1 @@
-web: gunicorn medical_bot.wsgi:application --bind 0.0.0.0:$PORT
+web: uvicorn medical_bot.asgi:application --workers 1 --host 0.0.0.0 --port $PORT
